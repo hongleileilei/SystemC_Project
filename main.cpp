@@ -70,7 +70,7 @@ SC_MODULE(ALU) {
     sc_signal<sc_uint<16> > d1 = data1.read(), d2 = data2.read();
 
 
-    // 缺少op, psr, sign_ext, 补码
+    // 缺少op, psr, 补码
     // Had done the decoding and partition.
     // we can directly use operation code with 8 bits
     void prc() {
@@ -162,6 +162,7 @@ SC_MODULE(MUX) {
 
     // int? unint?
     // Question: where the result is supposed to received? TOP module or ALU module
+    //SIGN_EXT和ALU都在TOP里面实例化， SIGN_EXT的输出连接到MUX，MUX输出到ALU
 SC_MODULE(SIGN_EXT) {
     sc_in<sc_int<8> > Imm;
     sc_out<sc_int<16> > Immout;
@@ -184,6 +185,11 @@ SC_MODULE(SIGN_EXT) {
     }
 };
 
+
+
+//我建议单独做一个decoder模块，然后全部在Top实例化，不然Top里面太乱了
+//若是在Top里面一边decode一边实例化， 相当于在Top里面定义sc_signal，然后sc_signal.write()进行
+//赋值和连接sc_in的操作，可能会出现问题。
 
 SC_MODULE(TOP) {
     sc_in<sc_uint<16> > instr;
