@@ -60,97 +60,27 @@ SC_MODULE(RF) {
 
 SC_MODULE(ALU) {
     //   MUX在TOP模块里面实现
-    //   缺少decoder
     sc_in<sc_uint<16> > data1, data2;
-    sc_in<sc_uint<5> > op;     //  调整op位数，25个操作
-
-
+    sc_in<sc_uint<3> > op;     //  调整op位数，25个操作
     sc_out<sc_uint<4> > psr;
-    sc_out<sc_uint<16> > dataout;
-    sc_signal<sc_uint<16> > d1 = data1.read(), d2 = data2.read();
+    sc_out<sc_uint<16> > dataout;    
+    sc_uint<16>  d1 = data1.read(), d2 = data2.read();
 
 
-    // 缺少op, psr, 补码
-    // Had done the decoding and partition.
-    // we can directly use operation code with 8 bits
-    void prc() {
-        // ADD ADDI
-        if (d1.range(15:12) == 0 && d1.range(7:4) == 5 || d1.range(15:12) == 5) {
-            dataout.write(d1 + d2);
-        }
+    // 缺少op, psr, 补码 
 
-        // SUB SUBI
-        else if (d1.range(15:12) == 0 && d1.range(7:4) == 9 || d1.range(15:12) == 9) {
-            dataout.write(d1 + d2);
-        }
-        // CMP CMPI
-        else if (d1.range(15:12) == 0 && d1.range(7:4) == 11 || d1.range(15:12) == 11) {
-            dataout.write(d1 + d2);
-        }
-        // AND ANDI
-        else if (d1.range(15:12) == 0 && d1.range(7:4) == 1 || d1.range(15:12) == 1) {
-            dataout.write(d1 + d2);
-        }
-        // OR ORI
-        else if (d1.range(15:12) == 0 && d1.range(7:4) == 2 || d1.range(15:12) == 2) {
-            dataout.write(d1 + d2);
-        }
-        // XOR XORI
-        else if (d1.range(15:12) == 0 && d1.range(7:4) == 3 || d1.range(15:12) == 3) {
-            dataout.write(d1 + d2);
-        }
-        // MOV MOVI
-        else if (d1.range(15:12) == 0 && d1.range(7:4) == 13 || d1.range(15:12) == 13) {
-            dataout.write(d1 + d2);
-        }
-        // LSH LSHI
-        else if (d1.range(15:12) == 8 && d1.range(7:4) == 4 || d1.range(15:12) == 8) {
-            dataout.write(d1 + d2);
-        }
-        // ASH ASHI
-        else if (d1.range(15:12) == 8 && d1.range(7:4) == 6 || d1.range(15:12) == 8) {
-            dataout.write(d1 + d2);
-        }
-        // LUI
-        else if (d1.range(15:12) == 15) {
-            dataout.write(d1 + d2);
-        }
-        // LOAD
-        else if (d1.range(15:12) == 8 && d1.range(7:4) == 0) {
-            dataout.write(d1 + d2);
-        }
-        // STOR
-        else if (d1.range(15:12) == 8 && d1.range(7:4) == 8) {
-            dataout.write(d1 + d2);
-        }
-        // Bcond
-        else if (d1.range(15:12) == 12) {
-            dataout.write(d1 + d2);
-        }
-        //Jcond
-        else if (d1.range(15:12) == 8 && d1.range(7:4) == 12) {
-            dataout.write(d1 + d2);
-        }
-        // JAL
-        else if (d1.range(15:12) == 4 && d1.range(7:4) == 8) {
-            dataout.write(d1 + d2);
-        }
-        // NOP
-        else if (d1.range(15:12) == 0 && d1.range(7:4) == 0) {
-            dataout.write(d1 + d2);
-        }
-    }
 };
 
 SC_MODULE(MUX) {
-    sc_in<sc_uint<16> > data1, data2;
-    sc_in<sc_uint<1> > op;
-    sc_out<sc_uint<16> > dataout;
+    sc_in<sc_int<16> > data1, data2;
+    sc_in<sc_int<1> > op;
+    sc_out<sc_uint<16> > dataout1;
+    sc_out<>
 
     void prc() {
-        if (op.read() == 0)
+        if (op.read() == 1)
             dataout.write(data1.read());
-        else if (op.read() == 1)
+        else if (op.read() == 0)
             dataout.write(data2.read());
     }
 
@@ -160,15 +90,38 @@ SC_MODULE(MUX) {
     }
 };
 
-    // int? unint?
-    // Question: where the result is supposed to received? TOP module or ALU module
-    //SIGN_EXT和ALU都在TOP里面实例化， SIGN_EXT的输出连接到MUX，MUX输出到ALU
-SC_MODULE(SIGN_EXT) {
-    sc_in<sc_int<8> > Imm;
-    sc_out<sc_int<16> > Immout;
-    sc_int<8> imm = Imm.read();
-    sc_int<16> immout;
 
+SC_MODULE(DEMUX) {
+    sc_in<sc_uint<1> > op; 
+    sc_in<sc_uint<16> > in;
+    sc_out<sc_uint<16> > out1, out2;
+
+    void prc() {
+        if (op == 1)
+        {
+            out1.write(in.read());
+            out1.write(0);
+        } 
+            
+        else if (op == 0)
+        {
+            out1.write(0);
+            out2.write(in.read());
+        }
+    }
+    SC_CTOR(DEMUX) {
+        SC_METHOD(prc);
+        sensitive << in << op;
+    }
+};
+
+    // int? unint?
+SC_MODULE(SIGN_EXT) {
+    sc_in<sc_uint<8> > Imm;
+    sc_out<sc_int<16> > Immout;
+    sc_uint<8> imm = Imm.read();
+    sc_int<16> immout;
+    
     void prc() {
         for (int i = 8; i < 16; i++) {
             immout[i] = imm[7];
@@ -179,25 +132,75 @@ SC_MODULE(SIGN_EXT) {
         Immout.write(immout);
     }
 
-    SC_CTOR() {
+    SC_CTOR(SIGN_EXT) {
         SC_METHOD(prc);
         sensitive << Imm;
     }
 };
 
 
+SC_MODULE(DFF) {
+    sc_in<bool> clk;
+    sc_in<sc_uint<16> > datain;
+    sc_out<sc_uint<16> > dataout;
+    void prc() {
+        dataout.write(datain.read());
+    }
 
-//我建议单独做一个decoder模块，然后全部在Top实例化，不然Top里面太乱了
-//若是在Top里面一边decode一边实例化， 相当于在Top里面定义sc_signal，然后sc_signal.write()进行
-//赋值和连接sc_in的操作，可能会出现问题。
+    SC_CTOR(DFF) {
+        SC_METHOD(prc);
+        sensitive << clk.pos();
+    }
+};
 
-SC_MODULE(TOP) {
-    sc_in<sc_uint<16> > instr;
+// 两个DFF串联
+SC_MODULE(DELAY_2) {
+    sc_in<bool> clk;
+    sc_in<sc_uint<1> > datain;
+    sc_out<sc_out<1> > dataout;
+    sc_signal<sc_uint<1> > ss;
+
+    void prc() {}
+    
+    SC_CTOR(DELAY_2) {
+        DFF d1("d1"), d2("d2"); 
+        d1 << clk << datain << ss;
+        d2 << clk << ss << dataout; 
+        SC_METHOD(prc);
+        sensitive << clk;
+    }
+};
+
+// 3个DFF串联
+SC_MODULE(DELAY_3) {
+    sc_in<bool> clk
+    sc_in<sc_uint<1> > datain;
+    sc_out<sc_uint<1> > dataout;
+    sc_signal<sc_uint<1> > s1, s2;
+
+    void prc() {}
+
+    SC_CTOR(DELAY_3) {
+        DFF d1("d1"), d2("d2"), d3("d3");
+        d1 << clk << datain << s1;
+        d2 << clk << s1 << s2;
+        d3 << clk << s2 << dataout; 
+        SC_METHOD(prc);
+        sensitive << clk.pos();
+    }
+};
+
+SC_MODULE(DECODER) {
     sc_in<bool> clock;
-    //extra output for wave
-    //extra output push decoded instr to other module
+    sc_in<sc_uint<16> > instr;
 
-
+    sc_out<sc_uint<1> > RF_w, RF_r, DM_w, DM_r, PM_w, PM_r;
+    sc_out<sc_uint<1> > demux, mux_im, mux_ld, mux_wr;  // 三个MUX， 一个imm， 一个load， 最后一个用在writeback
+    sc_out<sc_uint<3> > op;         // 加法一类（0），减法比较一类（1），mov load一类（2），移位一类（3）：暂定4类
+    sc_out<sc_uint<4> > Rs, Rd;
+    sc_out<sc_uint<4> > flag;
+    //sc_out<sc_uint<8> > shift_op;  没必要
+    
     //decoding partition
     sc_uint<4> opcode;
     sc_uint<4> op_ext;
@@ -205,12 +208,6 @@ SC_MODULE(TOP) {
     sc_uint<4> rd;
     sc_uint<8> im;
 
-
-    //signals
-    sc_out<sc_uint<1> > RF_w, RF_r, DM_w, DM_r, PM_w, PM_r;
-    sc_out<sc_uint<1> > demux, mux_im, mux_ld;
-    sc_out<sc_uint<4> > op;
-    sc_out<sc_uint<8> > shift_op;
     //inner temp
     sc_uint<4> op_temp;//using for temprarily store the operation
 
@@ -229,7 +226,13 @@ SC_MODULE(TOP) {
         if(opcode == 0){
             //add sub cmp or xor mov nop
             if(op_ext == 5){//add
-                ;
+                ///////   重点注意RF_w信号  /////////
+                RF_w.write(0); RF_r.write(1);
+                //////////////////////////////////// 
+                mux_ld.write(1); mux_im.write(1);  
+                op.write(0);     demux.write(0);
+                DM_w.write(0);   DM_r.write(0);
+                mux_wr.write(0);  // 每个操作以此类推
             }
             else if(op_ext == 9){//sub
                 ;
@@ -320,30 +323,19 @@ SC_MODULE(TOP) {
         ////////////////////////
     }
 
-    void ctrl_sig(){//control signal definition
-        //ALU operation signal
-        op.write(op_temp);
-
-    }
-
-
-    SC_CTOR(){
-        sign_ext = new SIGN_EXT("SIGN_EXT_sign_ext");
-        sign_ext->Imm(im);
 
 
 
-
-        sensitive<<clock;
-
-
-
-    }
 };
 
 
 
+SC_MODULE(TOP) {
+
+};
+
 
 int sc_main(int argv, char* argc[]) {
+    sc_clock clk("clk", 10, SC_NS, 0.5, 10, SC_NS, true); // 开始10秒低电平
 
 }
