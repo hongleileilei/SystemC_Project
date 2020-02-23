@@ -6,7 +6,7 @@
 //DP, CTRL
 using namespace std;
 SC_MODULE(DM){
-  sc_in<sc_uint<8> > addr;//address input
+  sc_in<sc_uint<16> > addr;//address input
   sc_in<sc_uint<16> > din;//data input
   sc_in<sc_uint<1> > wr_en, rd_en;// write_enable && read_enable
   sc_out<sc_uint<16> > dout;// data out
@@ -31,7 +31,7 @@ SC_MODULE(DM){
 };
 
 SC_MODULE(PM){
-  sc_in<sc_uint<8> > addr;
+  sc_in<sc_uint<16> > addr;
   sc_out<sc_uint<16> > data;
 
   sc_uint<16> Data[100];
@@ -332,7 +332,7 @@ SC_MODULE(CTRL){
     sc_in<sc_uint<16> > Instr;
     sc_in<sc_uint<4> > psr;//ZNCF
     sc_in<sc_uint<16> > Rtar_val;//////////////////////// Rtar
-    sc_out<sc_uint<8> > pc;
+    sc_out<sc_uint<16> > pc;
     sc_out<sc_uint<8> > Imm;//signed or unsigned, 8-bit or 16-bit
     sc_out<sc_uint<6> > ctrl;
     sc_out<sc_uint<4> > R_src, R_dest;
@@ -355,7 +355,7 @@ SC_MODULE(CTRL){
     sc_uint<1> n;
     sc_uint<1> c;
     sc_uint<1> f;
-    sc_uint<8> inter_pc;
+    sc_uint<16> inter_pc;
     sc_uint<3> shift_op;
     //local method
     void proc(){
