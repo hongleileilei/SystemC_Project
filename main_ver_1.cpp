@@ -1,489 +1,345 @@
 #include "systemc.h"
+#include "math.h"
 //4 modules completion required
 //DM, PM, RF, ALU
 //2 upper level modules
 //DP, CTRL
+using namespace std;
 SC_MODULE(DM){
-  SC_CTOR(DM){
+  sc_in<sc_uint<8> > addr;//address input
+  sc_in<sc_uint<16> > din;//data input
+  sc_in<sc_uint<1> > wr_en, rd_en;// write_enable && read_enable
+  sc_out<sc_uint<16> > dout;// data out
+
+  sc_uint<16> Data[100];
+  void proc(){
+    if(wr_en.read() == 1){//write enable
+      Data[addr.read()]=din.read();
+    }
+    else if(rd_en.read() == 1){//read enable
+      dout.write(Data[addr.read()]);
+    }
   }
+
+  SC_CTOR(DM){
+    for(int i=0; i<100; i++){
+      Data[i] == 0;
+    }
+  }
+
+
 };
 
 SC_MODULE(PM){
-  SC_CTOR(PM){
+  sc_in<sc_uint<8> > addr;
+  sc_out<sc_uint<16> > data;
+
+  sc_uint<16> Data[100];
+  sc_uint<16> temp_data;
+  sc_uint<8> temp_addr;
+  void proc(){
+    temp_addr = addr.read();
+    temp_data = Data[temp_addr];
+    data.write(temp_data);
   }
+  SC_CTOR(PM){
+    //Initialization
+    for(int i =0; i<100; i++){
+      Data[i]=0;
+    }
+  }
+
+
 };
 
 SC_MODULE(RF){
+  sc_in<bool> clk;
+  sc_in<sc_uint<1> > wr_en, rd_en;
+  sc_in<sc_uint<4> > Raddr1, Raddr2, Waddr;
+  sc_in<sc_uint<16> > Wdata;
+  sc_out<sc_uint<16> > data1, data2;
+
+  sc_uint<16> mem[16];
+  void proc(){
+    if(rd_en.read()==1){
+      data1.write(mem[Raddr1.read()]);
+      data2.write(mem[Raddr2.read()]);
+    }
+    else if(wr_en.read()==1){
+      mem[Waddr.read()]=Wdata.read();
+    }
+  }
   SC_CTOR(RF){
+    for(int i=0;i<16;i++){
+      mem[i]=0;
+    }
+    SC_METHOD(proc);
+    sensitive<<clk.pos();
   }
 };
 
+//Error exists: Immediate value signed or unsigned
 SC_MODULE(ALU){
-      sc_in<sc_uint<16> > DATA1, DATA2;
-    sc_in<sc_int<8> > IMM;
-    sc_in<sc_uint<6> > CONTROL;
-    sc_out<sc_uint<4> > PSR;
-    sc_out<sc_uint<16> > RESULT; 
+  //////////////////////////////////////
+  //PORTS
+  //////////////////////////////////////
+  sc_in<bool> clk;
+  sc_in<sc_uint<16> > DATA1, DATA2;
+  sc_in<sc_int<8> > IMM;
+  sc_in<sc_uint<6> > CONTROL;
+  sc_out<sc_uint<4> > PSR;//PORTS SEQUENCE: cnfz
+  sc_out<sc_uint<16> > RESULT;
 
-    sc_uint<16> data1 = DATA1.read(), data2 = DATA2.read(), result;
-        // data1: Rdest      data2: Raddr, Ramount, Rsrc
-    sc_int<8> im = IMM.read();
-    sc_uint<6> control = CONTROL.read();
-    sc_uint<4> psr;  // [0]c  [1]n  [2]f  [3]z
-    
-    sc_uint<16> imm, imm_ori;
-    int i = 0;
-    
-    sc_uint<16> data2inv, imminv;
-    int lendata1 = 16, lendata2 = 16, lenresult = 16, lenimm = 16, lenresult_cmp = 16; //lenresult > max(lendata1, lendata2) 产生进位
-    sc_uint<17> mmax = (1 << 16);
-    sc_uint<16> result_cmp;
-    sc_uint<16> right1;
-    sc_uint<4> right2;
-    sc_uint<16> right3;
-    sc_uint<4> right4;
-    sc_uint<16> letf_most;
+  sc_uint<16> data1;
+  sc_uint<16> data2;
+  sc_uint<16> result;
 
-    void prc() {
-        for (i = 0; i < 16; i++)  //data2 取反
-            data2inv[i] = ~data2[i];
-        data2inv += 1;
+  sc_int<8> im;
+  sc_uint<6> control;
+  sc_uint<4> psr;
+  sc_uint<16> imm, imm_ori;
+  int i;
 
-        for (i = 8; i < 16; i++) // sign_ext
-            imm[i] = im[7];
-        for (i = 0; i < 8; i++) 
-            imm[i] = im[i];
+  sc_uint<16> data2inv, imminv;
+  int lendata1, lendata2, lenresult, lenimm, lenresult_cmp;
+  sc_uint<17> mmax;
+  sc_uint<16> result_cmp;
+  sc_uint<16> right1;
+  sc_uint<4> right2;
+  sc_uint<16> right3;
+  sc_uint<4> right4;
+  sc_uint<1> left_most;
 
-        for (i = 8; i < 16; i++) // ORI 中的zero_extend, XORI, MOVI也用
-            imm_ori[i] = 0;
-        for (i = 0; i < 8; i++)
-            imm_ori[i] = im[i];
-        
-        for (i = 0; i < 16; i++) // imm 取反
-            imminv[i] = ~imm[i];
-        imminv += 1;
+  void proc(){
+    data1 = DATA1.read();//read from RF
+    data2 = DATA2.read();//read from RF
+    control = CONTROL.read();//read from DP
+    im = IMM.read();//read from DP
+    //define some useful lenth
+    lendata1 = 16; lendata2 = 16; lenresult = 16; lenimm = 16; lenresult_cmp = 16;
+    mmax = (1<<16);//comparison maximum, used for overflow and compare
+    for(i = 0; i<16; i++){//get the NOT
+      data2inv[i] = ~data2[i];
+    }
+    data2inv += 1;
 
-        if (contorl == 1) { // ADD  [0]c  [1]n  [2]f  [3]z
-                //// overflow start
-            if ( (mmax - data1) >= data2 )   
-                result = data1 + data2;
-            else                                    
-                result = mmax;               
-                //// overfloe done
-
-                //// 进位 start
-            for (i = 15; i >= 0; i--) {
-                if (data1[i] == 0)
-                    lendata1--;
-                else
-                    break;
-            }
-            for (i = 15; i >= 0; i--) {
-                if (data2[i] == 0)
-                    lendata2--;
-                else
-                    break;
-            }
-            for (i = 15; i >= 0; i--) {
-                if (result[i] == 0)
-                    lenresult--;
-                else
-                    break;
-            }
-            if (lenresult > max(lendata1, lendata2))
-                psr[0] = 1;
-            else
-                psr[0] = 0;
-            lendata1 = 16; lendata2 = 16; lenresult = 16;
-                //// 进位 done
-
-                //// psr start
-            if (result == 0)
-                psr[3] = 1;
-            else
-                psr[3] = 0;
-            psr[1] = 0;
-            psr[2] = 0;
-                //// psr done
-        }  
-             
-        else if (control == 2) { // ADDI
-                //// overflow start
-            if ( (mmax - data1) >= imm )   
-                result = data1 + imm;
-            else                                    
-                result = mmax;               
-                //// overfloe done
-
-                //// 进位 start
-            for (i = 15; i >= 0; i--) {
-                if (data1[i] == 0)
-                    lendata1--;
-                else
-                    break;
-            }
-            for (i = 15; i >= 0; i--) {
-                if (imm[i] == 0)
-                    lenimm--;
-                else
-                    break;
-            }
-            for (i = 15; i >= 0; i--) {
-                if (result[i] == 0)
-                    lenresult--;
-                else
-                    break;
-            }
-            if (lenresult > max(lendata1, lenimm))
-                psr[0] = 1;
-            else
-                psr[0] = 0;
-            lendata1 = 16; lendata2 = 16; lenimm = 16;
-                //// 进位 done
-                
-                //// psr start
-            if (result == 0)
-                psr[3] = 1;
-            else
-                psr[3] = 0;
-            psr[1] = 0;
-            psr[2] = 0;
-                //// psr done
-        }  
-            
-        else if (control = 3) { //SUB
-                //// overflow start
-            if ( data1 >= data2 ) {
-                result = data1 - data2;
-                    //// 进位 start
-                for (i = 15; i >= 0; i--) {
-                    if (data1[i] == 0)
-                        lendata1--;
-                    else
-                        break;
-                }
-                for (i = 15; i >= 0; i--) {
-                    if (data2[i] == 0)
-                        lendata2--;
-                    else
-                        break;
-                }
-                for (i = 15; i >= 0; i--) {
-                    if (result[i] == 0)
-                        lenresult--;
-                    else
-                        break;
-                }
-                if (lenresult < max(lendata1, data2))
-                    psr[0] = 1;
-                else
-                    psr[0] = 0;
-                lendata1 = 16; lendata2 = 16; lenresult = 16;
-                    //// 进位 done
-                psr[1] = 0;
-            }
-
-            else {
-                psr[1] = 1;
-                psr[0] = 1;                              
-                result = 0;
-            }               
-                //// overfloe done
-
-                //// psr start
-            if (result == 0)
-                psr[3] = 1;
-            else
-                psr[3] = 0;
-            psr[2] = 0;
-                //// psr done
-        }  
-
-        else if (control == 4) { //SUBI
-                //// overflow start
-            if ( data1 >= imm ) {
-                result = data1 - imm;
-                    //// 进位 start
-                for (i = 15; i >= 0; i--) {
-                    if (data1[i] == 0)
-                        lendata1--;
-                    else
-                        break;
-                }
-                for (i = 15; i >= 0; i--) {
-                    if (imm[i] == 0)
-                        lenimm--;
-                    else
-                        break;
-                }
-                for (i = 15; i >= 0; i--) {
-                    if (result[i] == 0)
-                        lenresult--;
-                    else
-                        break;
-                }
-                if (lenresult < max(lendata1, lenimm))
-                    psr[0] = 1;
-                else
-                    psr[0] = 0;
-                lendata1 = 16; lenimm = 16; lenresult = 16;
-                    //// 进位 done
-                psr[1] = 0;
-            }
-
-            else {
-                psr[1] = 1;
-                psr[0] = 1;                              
-                result = 0;
-            }               
-                //// overfloe done
-
-                //// psr start
-            if (result == 0)
-                psr[3] = 1;
-            else
-                psr[3] = 0;
-            psr[2] = 0;
-                //// psr done
-        }
-
-        else if (control == 5) { // CMP
-               //// overflow start
-            if ( data1 >= data2 ) {
-                result_cmp = data1 - data2;
-                    //// 进位 start
-                for (i = 15; i >= 0; i--) {
-                    if (data1[i] == 0)
-                        lendata1--;
-                    else
-                        break;
-                }
-                for (i = 15; i >= 0; i--) {
-                    if (data2[i] == 0)
-                        lendata2--;
-                    else
-                        break;
-                }
-                for (i = 15; i >= 0; i--) {
-                    if (result_cmp[i] == 0)
-                        lenresult_cmp--;
-                    else
-                        break;
-                }
-                if (lenresult_cmp < max(lendata1, lendata2))
-                    psr[0] = 1;
-                else
-                    psr[0] = 0;
-                lendata1 = 16; lendata2 = 16; lenresult_cmp = 16;
-                    //// 进位 done
-                psr[1] = 0;
-            }
-
-            else {
-                psr[1] = 1;
-                psr[0] = 1;                              
-                result_cmp = 0;
-            }               
-                //// overfloe done
-
-                //// psr start
-            if (result_cmp == 0)
-                psr[3] = 1;
-            else
-                psr[3] = 0;
-            psr[2] = 0;
-                //// psr done
-        }
-
-        else if (control == 6) { //CMPI
-                    //// overflow start
-            if ( data1 >= imm ) {
-                result_cmp = data1 - imm;
-                    //// 进位 start
-                for (i = 15; i >= 0; i--) {
-                    if (data1[i] == 0)
-                        lendata1--;
-                    else
-                        break;
-                }
-                for (i = 15; i >= 0; i--) {
-                    if (imm[i] == 0)
-                        lenimm--;
-                    else
-                        break;
-                }
-                for (i = 15; i >= 0; i--) {
-                    if (result_cmp[i] == 0)
-                        lenresult_cmp--;
-                    else
-                        break;
-                }
-                if (lenresult_cmp < max(lendata1, imm))
-                    psr[0] = 1;
-                else
-                    psr[0] = 0;
-                lendata1 = 16; lendata2 = 16; lenimm = 16;
-                    //// 进位 done
-                psr[1] = 0;
-            }
-
-            else {
-                psr[1] = 1;
-                psr[0] = 1;                              
-                result_cmp = 0;
-            }               
-                //// overfloe done
-
-                //// psr start
-            if (result_cmp == 0)
-                psr[3] = 1;
-            else
-                psr[3] = 0;
-            psr[2] = 0;
-                //// psr done
-        }
-
-        else if (control == 7) { // AND
-            for (i = 0; i < 16; i++)
-                result[i] = data1[i] & data2[i]; 
-        }
-
-        else if (control == 8) { // ANDI
-            for (i = 0; i < 16; i++) 
-                result[i] = data1[i] & imm[i];
-        }
-        
-        else if (control == 9) { // OR  
-            for (i = 0; i < 16; i++)
-                result[i] = data1[i] | data2[i];
-        }
-
-        else if(control == 10) { // ORI
-            for (i = 0; i < 16; i++)
-                result[i] = data1[i] | imm_ori[i];
-        }
-
-        else if (control == 11) { // XOR
-            for (i = 0; i < 16; i++)
-                result[i] = data1[i] ^ data2[i]; 
-        }
-
-        else if (control == 12) { // XORI
-            for (i = 0; i < 16; i++)
-                result[i] = data1[i] ^ imm_ori[i];
-        }
-
-        else if (control == 13) { // MOV
-            result = data2;
-        }
-
-        else if (control == 14) { // MOVI
-            result = imm_ori;
-        }
-
-        else if (control == 15) { // LSH
-            if (data2[15] == 1) { //负数， 取反
-                for (i = 0; i < 16; i++) 
-                    right1[i] = ~data1[i];
-                right1 += 1;
-                result = data1 >> right1;
-            }
-            else 
-                result = data1 << data2;
-        }
-
-        else if (control == 16) { // LSHI
-            if (imm[4] == 1) { // 负数， 取反
-                for (i = 0; i < 5; i++)
-                    right2[i] = ~imm[i];
-                right2 += 1;
-                result = data1 >> right2;
-            }
-            else 
-                resutl = data1 << imm.range(4:0);
-        }
-
-        else if (control == 17) { // ASH
-            left_most = data1[15];
-            if (data2[15] == 0)
-                result = data1 << data2;
-            else {
-                for (i = 0; i < 16; i++) 
-                    right3[i] = ~data2[i];
-                right3 += 1;
-                result = data1 >> right3;
-                for (i = 0; i < right3; i++)
-                    result[15-i] = left_most;
-            }
-        }
-
-        else if (control == 18) { // ASHI
-            left_most = data1[15];
-            if (imm[4] == 0)
-                result = data1 << imm.range(4:0);
-            else
-            {
-                for (i = 0; i < 5; i++)
-                    right4[i] = ~imm[i];
-                right4 += 1;
-                result = data1 >> right4;
-                for (i = 0; i < right4; i++)
-                    result[15-i] = left_result;
-            }
-        }
-
-        else if (control == 19) { //LUI:The immediate value is shifted left 16 bits and stored in the register. 
-                                  //The lower 16 bits are zeroes.
-            result = imm << 8;
-        }
-
-        else if (control == 20) { // LOAD
-            result = data2;
-        }
-
-        else if (control == 21) { //STOR
-            result = data2;
-        }
-
-        else if (control == 22) { // NOP
-            ;
-        }
-
-        RESULT.write(result);
-        PSR.write(psr);
+    //sign extension for further usage
+    for(i=8;i<16;i++){
+      imm[i] = im[7];
+    }
+    for(i=0;i<8;i++){
+      imm[i] = im[i];
     }
 
-    SC_CTOR(ALU){
-        SC_METHOD(prc);
-        sensitive << clk.pos();
+    //sign extension for ORI, XORI, MOVI operation
+    for(i=8;i<16;i++){
+      imm_ori[i]=0;
     }
+    for(i=0;i<8;i++){
+      imm_ori[i] = im[i];
+    }
+
+    //get NOT for imm
+    for(i=0;i<16;i++){
+      imminv[i] = ~imm[i];
+    }
+    imminv+1;
+
+    //ADD
+    if(control == 1){
+      ///overflow start
+      if((mmax-data1) >= data2)
+        result = data1 + data2;
+      else
+        result = mmax;
+        //overflow done
+
+      //carrying manipulation
+      for(i=15; i>= 0;i--){
+        if(data1[i]==0)
+          lendata1--;
+        else
+          break;
+      }
+
+      for(i=15;i>=0;i--){
+        if(data2[i]==0)
+          lendata2--;
+        else
+          break;
+      }
+
+      for(i=15;i>=0;i--){
+        if(result[i]==0)
+          lenresult--;
+        else
+          break;
+      }
+      if(lenresult > max(lendata1, lendata2))
+        psr[0] = 1;
+      else
+        psr[0] = 0;
+      lendata1 = 16; lendata2 = 16; lenresult = 16;
+      //carrying manipulation FINISHED
+
+      if(result == 0)
+        psr[3] = 1;
+      else
+        psr[3] = 0;
+      psr[1] = 0;
+      psr[2] = 0;
+      //psr done
+    }
+    else if(control == 2){//ADDI
+      //overflow start
+      if((mmax-data1)>=imm)
+        result = data1+imm;
+      else
+        result=mmax;
+      //overflow done
+
+      //carrying manipulation
+      for(i=15;i>=0;i--){
+        if(data1[i]==0)
+          lendata1--;
+        else
+          break;
+      }
+      for(i=15;i>=0;i--){
+        if(imm[i]==0)
+          lenimm--;
+        else
+          break;
+      }
+      for(i=15;i>=0;i--){
+        if(result[i] == 0)
+          lenresult--;
+        else
+          break;
+      }
+      if(lenresult>max(lendata1,lenimm))
+        psr[0]=1;
+      else
+        psr[0] = 0;
+      lendata1=16; lendata2=16; lenimm=16;
+      //carrying manipulation
+
+      //psr manipulation
+      if(result == 0)
+        psr[3] = 1;
+      else
+        psr[3] = 0;
+      psr[1] = 0;
+      psr[2] = 0;
+      //psr manipulation
+    }
+
+    else if(control==3){//SUB
+      //overflow detection
+      if(data1 >= data2){
+        result = data1 - data2;
+        //carrying manipulation
+        for(i=15;i>=0;i++){
+          if(data1[i] == 0)
+            lendata1--;
+          else
+            break;
+        }
+        for(i=15;i>=0;i--){
+          if(data2[i]==0)
+            lendata2--;
+          else
+            break;
+        }
+        if(lenresult < max(lendata1, lendata2))
+          psr[0] = 1;
+        else
+          psr[0] = 0;
+        lendata1 = 16; lendata2 = 16; lenresult = 16;
+        //carrying manipulation FINISHED
+        psr[1]= 0;
+      }
+      else{
+        psr[1]=1;
+        psr[0]=1;
+        result=0;
+      }
+      //overflow done
+
+      //psr value manipulation
+      if(result==0)
+        psr[3] = 1;
+      else
+        psr[3] = 0;
+      psr[2] = 0;
+      //psr value manipulation DONE
+    }
+    else if(control == 4){//SUBI
+      //overflow detection
+      if(data1 >= imm){
+        result = data1 - imm;
+        //carrying manipulation
+        for(i-15;i>=0;i--){
+          if(data1[i] == 0)
+            lendata1--;
+          else
+            break;
+        }
+      }
+    }
+
+  }
   SC_CTOR(ALU){
   }
 };
 
 SC_MODULE(DP){
+  /////////////////////////////////
+  //PORTS
+  /////////////////////////////////
+  //Instr: From PM to DP to CTRL
+  //psr_val: From ALU to DP to CTRL
+  //Rtar_val: From RF to DP to CTRL
+  //pc: From CTRL to DP to PM (finding specific instruction)
+  //Imm: From CTRL to DP to ALU
+  //ctrl: From CTRL to DP, control separator of DP Register Controller
+  //Rsrc, Rdest: From CTRL to Register Controller and then to RF
   sc_out<sc_uint<16> > Instr;
   sc_out<sc_uint<4> > psr_val;
-  sc_out<sc_uint<16> > Rtar;
+  sc_out<sc_uint<16> > Rtar_val;
   sc_in<sc_uint<8> > pc;
   sc_in<sc_uint<8> > Imm;//signed or unsigned, 8-bit or 16-bit
-  sc_in<sc_uint<16> > ctrl;
-  sc_in<sc_uint<4> > Rsrc, Rdest, Ramt;
+  sc_in<sc_uint<6> > ctrl;
+  sc_in<sc_uint<4> > Rsrc, Rdest;
 
-  void proc();
+  sc_uint<16> temp_instr;
+  sc_uint<4> temp_psr_val;
+  sc_uint<16> temp_Rtar_val;
+  sc_uint<8> temp_pc;
+  sc_uint<8> temp_Imm;
+  void proc(){
+
+  }
   SC_CTOR(DP){
     //need to connect DP with the four module above
   }
 };
 
 SC_MODULE(CTRL){
+    //////////////////////////
+    //PORTS
+    /////////////////////////
     sc_in<sc_uint<16> > Instr;
     sc_in<sc_uint<4> > psr;//ZNCF
     sc_in<sc_uint<16> > Rtar_val;//////////////////////// Rtar
     sc_out<sc_uint<8> > pc;
     sc_out<sc_uint<8> > Imm;//signed or unsigned, 8-bit or 16-bit
     sc_out<sc_uint<6> > ctrl;
-    sc_out<sc_uint<4> > R_src, R_dest, R_amt;
+    sc_out<sc_uint<4> > R_src, R_dest;
+    /////////////////////////
+    //PORTS
+    /////////////////////////
+
 
     //displacement is defined locally， and some other decompositions
     sc_uint<16> lcl_instr;
@@ -501,13 +357,12 @@ SC_MODULE(CTRL){
     sc_uint<1> f;
     sc_uint<8> inter_pc;
     sc_uint<3> shift_op;
-    sc_uint<1> sf
     //local method
     void proc(){
       //Done Op: add, addi, sub, subi, and, andi, cmp, cmpi
       //         or, ori, xor, xori, mov, movi, stor, load,
       //         jal, jcond, bcond, lui, lsh, lshi, ash, ashi
-      //Pending: 
+      //Pending:
       //ATTENTION: jal NOT SURE FOR ACTIVITIES SEQUENCE
       lcl_instr=Instr.read();//retrieve instruction
       psr_val = psr.read();//retrieve psr value
@@ -929,7 +784,6 @@ SC_MODULE(CTRL){
       SC_METHOD(proc);
       sensitive<<Instr;
     }
-
 };
 
 int sc_main(int argc, char* argv[]){
