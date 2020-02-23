@@ -582,10 +582,6 @@ SC_MODULE(DP){
   RF *rf;
   ALU *alu;
 
-    //DM   dm("dm");
-    //PM   pm("pm");
-    //RF   rf("rf");
-    //ALU  alu("alu");
 
     //  [9:8] rf_w, rf_r; [7:6] dm_w, dm_r
   void proc(){
@@ -593,20 +589,60 @@ SC_MODULE(DP){
     rf_rd = CTRL.read().range(8, 8);
     dm_wr = CTRL.read().range(7, 7);
     dm_rd = CTRL.read().range(6, 6);
-    ctrl = CTRL.read().range(5, 0);
-  }
+    alu_ctrl = CTRL.read().range(5, 0);
+        // ADDI SUBI ANDI ORI XORI MOVI LSHI ASHI LUI
+        if (alu_ctrl == sc_uint<6>(2) || alu_ctrl == sc_uint<6>(4) || alu_ctrl == sc_uint<6>(8) || alu_ctrl == sc_uint<6>(10) || alu_ctrl == sc_uint<6>(12) || alu_ctrl == sc_uint<6>(14) || alu_ctrl == sc_uint<6>(16) || alu_ctrl == sc_uint<6>(18) || alu_ctrl == sc_uint<6>(19) ) {
+		rf_Wdata.write( alu_result.read() );
+ 	}
+
+
+        // ADD SUB AND OR XOR MOV LSH ASH
+        else if (alu_ctrl == sc_uint<6>(1) || alu_ctrl == sc_uint<6>(3) || alu_ctrl== sc_uint<6>(7) || alu_ctrl == sc_uint<6>(9) || alu_ctrl == sc_uint<6>(11) || alu_ctrl == sc_uint<6>(13) || alu_ctrl == sc_uint<6>(15) || alu_ctrl == sc_uint<6>(17) ){
+		rf_Wdata.write( alu_result.read() );
+	}
+        // LOAD
+	else if (alu_ctrl == sc_uint<6>(20) ) {
+		dm_addr.write( alu_result.read() );
+		rf_Wdata.write( dm_dataout.read() );		
+	}
+        // STOR alu输出连接dm的数据线 rf输出连接dm地址线
+        else if (alu_ctrl == sc_uint<6>(21) ) {
+		dm_datain.write( alu_result.read() );
+		dm_addr.write( rf_Raddr1.read() );
+	}
+        // CMP
+        else if (alu_ctrl == sc_uint<6>(5) ) {
+		; // wr, rd 全零所以无所谓
+	}
+        // CMPI
+        else if (alu_ctrl == sc_uint<6>(6) ) {
+		;
+	}
+        // JUMP 没过alu
+        else if (alu_ctrl == sc_uint<6>(30) || alu_ctrl == sc_uint<6>(31) || alu_ctrl == sc_uint<6>(32) || alu_ctrl == sc_uint<6>(33) || alu_ctrl == sc_uint<6>(34) || alu_ctrl == sc_uint<6>(35) || alu_ctrl == sc_uint<6>(36) || alu_ctrl == sc_uint<6>(37) ) {
+		RTAR.write( rf_data2.read() );
+	}
+        // JAL 没过alu
+        else if (alu_ctrl == sc_uint<6>(38) ) {
+		rf_Wdata.write( PC.read() );
+		RTAR.write( rf_data2.read() );
+	}
+
+}
+
+
   SC_CTOR(DP){
     dm = new DM("dm");
     pm = new PM("pm");
     rf = new RF("rf");
     alu = new ALU("alu");
-    dm->wr_en(dm_wr);//
-    dm->rd_en(dm_rd);//
+    dm->wr_en(dm_wr);
+    dm->rd_en(dm_rd);
     dm->addr(dm_addr);//
     dm->din(dm_datain);//
     dm->dout(dm_dataout);//
     pm->addr(pm_addr);//
-    pm->dout(pm_data);//
+    pm->data(pm_data);//
     rf->wr_en(rf_wr);//
     rf->rd_en(rf_rd);//
     rf->Raddr1(rf_Raddr1);//Rdestination//
@@ -621,7 +657,6 @@ SC_MODULE(DP){
     alu->CONTROL(alu_ctrl);//
     alu->PSR(alu_psr);//
     alu->RESULT(alu_result);//
-
     }
 };
 
@@ -1207,12 +1242,12 @@ SC_MODULE(CTRL){
     }
     //constructor
     SC_CTOR(CTRL){
-      inter_pc
       SC_METHOD(proc);
       sensitive<<Instr;
     }
 };
 
 int sc_main(int argc, char* argv[]){
+
   return(0);
 }
