@@ -85,7 +85,7 @@ SC_MODULE(PM){
 //RF finished
 //RF is sensitive to clock positive edge, for highest priority
 SC_MODULE(RF){
-  sc_in<bool> clk;
+  //sc_in<bool> clk;
   sc_in<sc_uint<1> > wr_en, rd_en;
   sc_in<sc_uint<4> > Raddr1, Raddr2, Waddr;
   sc_in<sc_uint<16> > Wdata;
@@ -106,7 +106,7 @@ SC_MODULE(RF){
       mem[i]=0;
     }
     SC_METHOD(proc);
-    sensitive<<clk.pos();
+    //sensitive<<clk.pos();
   }
 };
 
@@ -118,7 +118,7 @@ SC_MODULE(ALU){
   //////////////////////////////////////
   //PORTS
   //////////////////////////////////////
-  sc_in<bool> clk;//clock
+  //sc_in<bool> clk;//clock
   sc_in<sc_uint<16> > DATA1, DATA2;//as indicated below
   sc_in<sc_uint<8> > IMM;//immediate value
   sc_in<sc_uint<6> > CONTROL;//control signal passing from DP, 6-bit
@@ -546,7 +546,7 @@ SC_MODULE(ALU){
   }
   SC_CTOR(ALU){
     SC_METHOD(proc);
-    sensitive<<clk.pos();
+    //sensitive<<clk.pos();
   }
 };
 
@@ -1248,6 +1248,24 @@ SC_MODULE(CTRL){
 };
 
 int sc_main(int argc, char* argv[]){
+  sc_signal<sc_uint<16> > instr; 
+  sc_signal<sc_uint<4> > psr;
+  sc_signal<sc_uint<16> > rtar;
+  sc_signal<sc_uint<16> > pc;
+  sc_signal<sc_uint<8> > imm;
+  sc_signal<sc_uint<10> > ctrl;
+  sc_signal<sc_uint<4> > rdsrc, rdest, r_w;
+
+
+  DP dp("dp");
+  dp << instr << psr << rtar << pc << imm << ctrl << rdsrc << rdest << r_w;
+
+  CTRL ct("ct");
+  ct << instr << psr << rtar << pc << imm << ctrl << rdsrc << rdest << r_w;
+
+
+  sc_start(100, SC_NS);
 
   return(0);
 }
+
