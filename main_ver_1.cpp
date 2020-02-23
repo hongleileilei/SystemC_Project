@@ -1,14 +1,27 @@
+//1 does DM PM has clock sensitive
+//2 JAL activity sequence
+//3 pc 16bit, disp 8bit, how to deal with pc+disp
+
+
+
+
+
 #include "systemc.h"
 #include "math.h"
 //4 modules completion required
 //DM, PM, RF, ALU
 //2 upper level modules
 //DP, CTRL
+
+
+
+
 using namespace std;
 SC_MODULE(DM){
   sc_in<sc_uint<16> > addr;//address input
   sc_in<sc_uint<16> > din;//data input
   sc_in<sc_uint<1> > wr_en, rd_en;// write_enable && read_enable
+  //sc_in<bool> clk;//clock
   sc_out<sc_uint<16> > dout;// data out
 
   sc_uint<16> Data[100];
@@ -25,6 +38,7 @@ SC_MODULE(DM){
     for(int i=0; i<100; i++){
       Data[i] == 0;
     }
+
   }
 
 
@@ -36,7 +50,7 @@ SC_MODULE(PM){
 
   sc_uint<16> Data[100];
   sc_uint<16> temp_data;
-  sc_uint<8> temp_addr;
+  sc_uint<16> temp_addr;
   void proc(){
     temp_addr = addr.read();
     temp_data = Data[temp_addr];
@@ -285,6 +299,177 @@ SC_MODULE(ALU){
           else
             break;
         }
+        for(i=15;i>=0;i--){
+          if(imm[i]==0){
+            lenimm--;
+          }
+          else{
+            break;
+          }
+        }
+        for(i=15;i>=0;i--){
+          if(result[i]==0){
+            lenresult--;
+          }
+          else{
+            break;
+          }
+        }
+        if(lenresult<max(lendata1,lenimm))
+          psr[0]=1;
+        else
+          psr[0]=0;
+        lendata1=16;
+        lenimm=16;
+        lenresult=16;
+        //carrying manipulation Done
+        psr[1]=0;
+      }
+      else{
+        psr[1]=1;
+        psr[0]=1;
+        result=0;
+      }
+      //overflow detection down
+      //psr manipulation
+      if(result==0)
+        psr[3]=1;
+      else
+        psr[3]=0;
+      psr[2]=0;
+    }
+    else if (control==5){//CMP
+      //overflow detection and manipulation
+      if(data1>=data2){
+        result_cmp=data1-data2;
+        for(i=15;i>=0;i--){
+          if(data1[i]==0)
+            lendata1--;
+          else
+            break;
+        }
+        for(i=15;i>=0;i--){
+          if(data2[i]==0)
+            lendata2--;
+          else
+            break;
+        }
+        for(i=15;i>=0;i--){
+          if(result_cmp[i]==0)
+            lenresult_cmp--;
+          else
+            break;
+        }
+        if(lenresult_cmp<max(lendata1,lendata2))
+          psr[0]=1;
+        else
+          psr[0]=0;
+        lendata1=16;lendata2=16;lenresult_cmp=16;
+        //carrying manipulation is done
+        psr[1]=0;
+      }
+      else{
+        psr[1]=1;
+        psr[0]=1;
+        result_cmp=0;
+      }
+      //overflow detection and manipulation is done
+      //psr manipulation
+      if(result_cmp==0)
+        psr[3]=1;
+      else
+        psr[3]=0;
+      psr[2]=0;
+    }
+    else if (control==6){//CMPI
+      if(data1>=imm){
+        result_cmp=data1-imm;
+        //carrying manipulation
+        for(i=15;i>=0;i--){
+          if(data1[i]==0)
+            lendata1--;
+          else
+            break;
+        }
+        for(i=15;i>=0;i--){
+          if(imm[i]==0)
+            lenimm--;
+          else
+            break;
+        }
+        for(i=15;i>=0;i--){
+          if(result_cmp[i]==0)
+            lenresult_cmp--;
+          else
+            break;
+        }
+        if(lenresult_cmp<max(lendata1,lenimm))
+          psr[0]=1;
+        else
+          psr[0]=0;
+        lendata1=16;lendata2=16;lenimm=16;
+        //carrying manipulation is done
+        psr[1]=0;
+      }
+      else{
+        psr[1]=1;
+        psr[0]=1;
+        result_cmp=0;
+      }
+      //overflow detection and manipulation is done
+      //psr manipulation
+      if(result_cmp==0)
+        psr[3]=1;
+      else
+        psr[3]=0;
+      psr[2]=0;
+    }
+
+    else if (control==7){//AND
+      for(i=0;i<16;i++)
+        result[i]=data1[i] & data2[i];
+    }
+    else if (control==8){//ANDI
+      for(i=0;i<16;i++)
+        result[i]=data1[i] & imm[i];
+    }
+    else if (control==9){//OR
+      for(i=0;i<16;i++)
+        result[i]=data1[i] | data2[i];
+    }
+    else if (control==10){//ORI
+      for(i=0;i<16;i++)
+        result[i]=data1[i] | imm[i];
+    }
+    else if (control==11){//XOR
+      for(i=0;i<16;i++)
+        result[i]=data1[i] ^ data2[i];
+    }
+    else if (control==12){//XORI
+      for(i=0;i<16;i++)
+        result[i]=data1[i] ^ imm[i];
+    }
+    else if (control==13){//MOV
+      result=data2;
+        }
+    else if (control==14){//MOVI
+      result=imm_ori;
+    }
+    else if (control==15){//LSH
+      if(data2[15]==1){//negative we need to take the reverse first
+        for(i=0;i<16;i++)
+          right1[i]=~data1[i];
+        right1+=1;
+        result=data1>>right1;
+      }
+      else{
+        result=data1<<data2;
+      }
+    }
+    else if (control==16){//LSHI
+      if(imm[4]==1){//negative we need to take the reverse first
+        for(i=0;i<5;i++)
+          right2[i]=~imm[i];
       }
     }
 
@@ -364,12 +549,14 @@ SC_MODULE(CTRL){
       //         jal, jcond, bcond, lui, lsh, lshi, ash, ashi
       //Pending:
       //ATTENTION: jal NOT SURE FOR ACTIVITIES SEQUENCE
+      //ATTENTION: Disp is 8bit but program counter is 16bit, how to deal with pc+Disp
+
       lcl_instr=Instr.read();//retrieve instruction
       psr_val = psr.read();//retrieve psr value
       z = psr_val.range(3,3);//z value from psr
-      n = psr_val.range(2,2);//n value from psr
-      c = psr_val.range(1,1);//c value from psr
-      f = psr_val.range(0,0);//f value from psr
+      f = psr_val.range(2,2);//f value from psr
+      n = psr_val.range(1,1);//n value from psr
+      c = psr_val.range(0,0);//c value from psr
       if(lcl_instr==0){
         //no operation should be Done
         //only counting up the internal
@@ -775,7 +962,7 @@ SC_MODULE(CTRL){
             inter_pc += 1;//program counter counting up
             pc.write(inter_pc);//retrieve new instructions
             ctrl.write("LUI");//control signal
-          }
+          }//LUI operation
         }
       }
     }
