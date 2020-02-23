@@ -569,101 +569,59 @@ SC_MODULE(DP){
   sc_in<sc_uint<10> > CTRL;
   sc_in<sc_uint<4> > RSRC, RDEST, R_W;
 
-
-  sc_signal<sc_uint<4> > psr;
-  sc_signal<sc_uint<16> > rtar;
-  sc_signal<sc_uint<16> > pc;
-  sc_signal<sc_uint<8> > imm;
-  sc_signal<sc_uint<6> > ctrl;
-
-  sc_signal<sc_uint<4> > rf_dest, rf_src, rf_waddr;
-  sc_signal<sc_uint<16> > rf_out1, rf_out2;
-  sc_signal<sc_uint<16> > rf_out1_ground, rf_out2_ground;
-  sc_signal<sc_uint<16> > rf_writedata_ground;
-  sc_signal<sc_uint<1> > rf_wr, rf_rd;
-
-  sc_signal<sc_uint<16> > alu_out;
-  sc_signal<sc_uint<16> > alu_out_ground;
-  sc_signal<sc_uint<16> > imm_ground;
-  sc_signal<sc_uint<16> > data2_ground;
-
-  sc_signal<sc_uint<1> > dm_wr, dm_rd;
-  sc_signal<sc_uint<16> > dm_out;
-  sc_signal<sc_uint<16> > dm_datain_ground;
-  sc_signal<sc_uint<16> > dm_dataout_ground;
-  sc_signal<sc_uint<16> > dm_addr_ground;
+  sc_signal<sc_uint<1> > dm_wr,dm_rd,rf_wr,rf_rd;
+  sc_signal<sc_uint<4> > rf_Raddr1, rf_Raddr2, rf_Waddr, alu_psr;
+  sc_signal<sc_uint<6> > alu_ctrl;
+  sc_signal<sc_uint<8> > alu_imm;
+  sc_signal<sc_uint<16> > dm_addr, dm_datain, dm_dataout, pm_addr, pm_data, rf_Wdata;
+  sc_signal<sc_uint<16> > rf_data1, rf_data2, alu_data1, alu_data2, alu_result;
 
 
-    DM   dm("dm");
-    PM   pm("pm");
-    RF   rf("rf");
-    ALU  alu("alu");
+  DM *dm;
+  PM *pm;
+  RF *rf;
+  ALU *alu;
+
+    //DM   dm("dm");
+    //PM   pm("pm");
+    //RF   rf("rf");
+    //ALU  alu("alu");
 
     //  [9:8] rf_w, rf_r; [7:6] dm_w, dm_r
-    void proc(){
-        rf_wr = CTRL.read().range(9, 9);
-        rf_rd = CTRL.read().range(8, 8);
-        dm_wr = CTRL.read().range(7, 7);
-        dm_rd = CTRL.read().range(6, 6);
-        ctrl = CTRL.read().range(5, 0);
-    }
-    SC_CTOR(DP){
-        // ADDI SUBI ANDI ORI XORI MOVI LSHI ASHI LUI
-        if (ctrl == 2 || ctrl == 4 || ctrl == 8 || ctrl == 10 || ctrl == 12 || ctrl == 14 || ctrl == 16 || ctrl == 18 || ctrl == 19) {
-            alu << * << rf_out1 << data2_ground << Imm << ctrl << PSR << alu_out;
-            rf << * << rf_wr << rf_rd << RDEST << RSRC << R_W << alu_out << rf_out1 << rf_out2;
-            dm << dm_addr_ground << dm_datain_ground << dm_wr << dm_rd << dm_dataout_ground;
-            pm << PC << Instr;
-        }
-        // ADD SUB AND OR XOR MOV LSH ASH
-        else if (ctrl == 1 || ctrl == 3 || ctrl == 7 || ctrl == 9 || ctrl == 11 || ctrl == 13 || ctrl == 15 || ctrl == 17) {
-            alu << * << rf_out1 << rf_out2 << imm_ground << ctrl << PSR << alu_out;
-            rf << * << rf_wr << rf_rd << RDEST << RSRC << R_W << alu_out << rf_out1 << rf_out2;
-            dm << dm_addr_ground << dm_datain_ground << dm_wr << dm_rd << dm_dataout_ground;
-            pm << PC << Instr;
-        }
-        // LOAD
-        else if (ctrl == 20) {
-            alu << * << rf_out1 << rf_out2 << imm_ground << ctrl << PSR << alu_out;
-            rf << * << rf_wr << rf_rd << RDEST << RSRC << R_W << dm_out << rf_out1 << rf_out2;
-            dm << alu_out << dm_datain_ground << dm_wr << dm_rd << dm_out;
-            pm << PC << Instr;
-        }
-        // STOR alu输出连接dm的数据线 rf输出连接dm地址线
-        else if (ctrl == 21) {
-            alu << * << rf_out1 << rf_out2 << imm_ground << ctrl << PSR << alu_out;
-            rf << * << rf_wr << rf_rd << RDEST << RSRC << R_W << rf_writedata_ground << rf_out1 << rf_out2;
-            dm << rf_out2 << alu_out << dm_wr << dm_rd << dm_dataout_ground;
-            pm << PC << Instr;
-        }
-        // CMP
-        else if (ctrl == 5) {
-            alu << * << rf_out1 << rf_out2 << imm_ground << ctrl << PSR << alu_out_ground;
-            rf << * << rf_wr << rf_rd << RDEST << RSRC << R_W << rf_writedata_ground << rf_out1 << rf_out2;
-            dm << dm_addr_ground << dm_datain_ground << dm_wr << dm_rd << dm_dataout_ground;
-            pm << PC << Instr;
-        }
-        // CMPI
-        else if (ctrl == 6) {
-            alu << * << rf_out1 << data2_ground << Imm << ctrl << PSR << alu_out_ground;
-            rf << * << rf_wr << rf_rd << RDEST << RSRC << R_W << rf_writedata_ground << rf_out1 << rf_out2;
-            dm << dm_addr_ground << dm_datain_ground << dm_wr << dm_rd << dm_dataout_ground;
-            pm << PC << Instr;
-        }
-        // JUMP 没过alu
-        else if (ctrl == 30 || ctrl == 31 || ctrl == 32 || ctrl == 33 || ctrl == 34 || ctrl == 35 || ctrl == 36 || ctrl == 37) {
-            alu << * << rf_out1 << data2_ground << Imm << ctrl << PSR << alu_out_ground;
-            rf << * << rf_wr << rf_rd << RDEST << RSRC << R_W << rf_writedata_ground << rf_out1 << RTAR;
-            dm << dm_addr_ground << dm_datain_ground << dm_wr << dm_rd << dm_dataout_ground;
-            pm << PC << Instr;
-        }
-        // JAL 没过alu
-        else if (ctrl == 38) {
-            alu << * << rf_out1_ground << rf_out2_ground << imm_ground << ctrl << PSR << alu_out_ground;
-            rf << * << rf_wr << rf_rd << RDEST << RSRC << R_W << PC << rf_out1_ground << RTAR;
-            dm << dm_addr_ground << dm_datain_ground << dm_wr << dm_rd << dm_dataout_ground;
-            pm << PC << Instr;
-        }
+  void proc(){
+    rf_wr = CTRL.read().range(9, 9);
+    rf_rd = CTRL.read().range(8, 8);
+    dm_wr = CTRL.read().range(7, 7);
+    dm_rd = CTRL.read().range(6, 6);
+    ctrl = CTRL.read().range(5, 0);
+  }
+  SC_CTOR(DP){
+    dm = new DM("dm");
+    pm = new PM("pm");
+    rf = new RF("rf");
+    alu = new ALU("alu");
+    dm->wr_en(dm_wr);//
+    dm->rd_en(dm_rd);//
+    dm->addr(dm_addr);//
+    dm->din(dm_datain);//
+    dm->dout(dm_dataout);//
+    pm->addr(pm_addr);//
+    pm->dout(pm_data);//
+    rf->wr_en(rf_wr);//
+    rf->rd_en(rf_rd);//
+    rf->Raddr1(rf_Raddr1);//Rdestination//
+    rf->Raddr2(rf_Raddr2);//Rsource//
+    rf->Waddr(rf_Waddr);//
+    rf->Wdata(rf_Wdata);//
+    rf->data1(rf_data1);//Destination
+    rf->data2(rf_data2);//Source
+    alu->DATA1(alu_data1);//
+    alu->DATA2(alu_data2);//
+    alu->IMM(alu_imm);//
+    alu->CONTROL(alu_ctrl);//
+    alu->PSR(alu_psr);//
+    alu->RESULT(alu_result);//
+
     }
 };
 
