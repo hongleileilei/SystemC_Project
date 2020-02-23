@@ -1,4 +1,4 @@
-//1 does DM PM has clock sensitive
+//1 does DM PM CTRL has clock sensitive
 //2 JAL activity sequence
 //3 pc 16bit, disp 8bit, how to deal with pc+disp
 
@@ -17,7 +17,12 @@
 
 
 using namespace std;
+
+//DM finished
+//DM is sensitive to write enable and read enable signal
+//it has a hundred 16-bit memory storing data from STOR function
 SC_MODULE(DM){
+  //clock is needed?
   sc_in<sc_uint<16> > addr;//address input
   sc_in<sc_uint<16> > din;//data input
   sc_in<sc_uint<1> > wr_en, rd_en;// write_enable && read_enable
@@ -38,12 +43,18 @@ SC_MODULE(DM){
     for(int i=0; i<100; i++){
       Data[i] == 0;
     }
-
+    SC_METHOD(proc);
+    sensitive<<wr_en;
+    sensitive<<rd_en;
   }
 
 
 };
 
+//PM finished
+//PM is only sensitive to addr changes
+//For inside, addr is for searching different instructions
+//For outside, addr is consiered as PC, program counter
 SC_MODULE(PM){
   sc_in<sc_uint<16> > addr;
   sc_out<sc_uint<16> > data;
@@ -61,11 +72,15 @@ SC_MODULE(PM){
     for(int i =0; i<100; i++){
       Data[i]=0;
     }
+    SC_METHOD(proc);
+    sensitive<<addr;
   }
 
 
 };
 
+//RF finished
+//RF is sensitive to clock positive edge, for highest priority
 SC_MODULE(RF){
   sc_in<bool> clk;
   sc_in<sc_uint<1> > wr_en, rd_en;
@@ -92,6 +107,9 @@ SC_MODULE(RF){
   }
 };
 
+//ALU finished
+//ALU should be sensitive to clock, for highest priority, if clock enabled
+//ALU is also controlled by control signals
 //Error exists: Immediate value signed or unsigned
 SC_MODULE(ALU){
   //////////////////////////////////////
@@ -99,16 +117,16 @@ SC_MODULE(ALU){
   //////////////////////////////////////
   sc_in<bool> clk;
   sc_in<sc_uint<16> > DATA1, DATA2;
-  sc_in<sc_int<8> > IMM;
+  sc_in<sc_uint<8> > IMM;
   sc_in<sc_uint<6> > CONTROL;
   sc_out<sc_uint<4> > PSR;//PORTS SEQUENCE: cnfz
   sc_out<sc_uint<16> > RESULT;
-
+  //data1:Rdest data2:Rsrc,Ramt,Raddr
   sc_uint<16> data1;
   sc_uint<16> data2;
   sc_uint<16> result;
 
-  sc_int<8> im;
+  sc_uint<8> im;
   sc_uint<6> control;
   sc_uint<4> psr;
   sc_uint<16> imm, imm_ori;
@@ -159,8 +177,7 @@ SC_MODULE(ALU){
     }
     imminv+1;
 
-    //ADD
-    if(control == 1){
+    if(control == 1){//ADD
       ///overflow start
       if((mmax-data1) >= data2)
         result = data1 + data2;
@@ -470,11 +487,63 @@ SC_MODULE(ALU){
       if(imm[4]==1){//negative we need to take the reverse first
         for(i=0;i<5;i++)
           right2[i]=~imm[i];
+        right2+=1;
+        result=data1>>right2;
       }
+      else
+        result=data1<<imm.range(4,0);
+    }
+    else if(control==17){//ASH
+        left_most=data1[15];
+        if(data2[15]==0)
+          result=data1<<data2;
+        else{
+          for(i=0;i<16;i++)
+            right3[i]=~data2[i];
+          right3 += 1;
+          result =data1>>right3;
+          for(i=0;i<right3;i++){
+            result[15-i]=left_most;
+          }
+        }
+    }
+    else if(control == 18){//ASHI
+      left_most=data1[15];
+      if(imm[4]==0)
+        result=data1<<imm.range(4,0);
+      else{
+        for(i=0;i<5;i++)
+          right4[i]=~imm[i];
+        right4 += 1;
+        result = data1 >> right4;
+        for(i=0; i<right4; i++)
+          result[15-i]=left_most;
+      }
+
+    }
+    else if (control == 19) { //LUI:The immediate value is shifted left 16 bits and stored in the register.
+                              //The lower 16 bits are zeroes.
+      result = imm << 8;
     }
 
+    else if (control == 20) { // LOAD
+      result = data2;
+    }
+
+    else if (control == 21) { //STOR
+      result = data2;
+    }
+
+    else if (control == 22) { // NOP
+      ;
+    }
+
+    RESULT.write(result);
+    PSR.write(psr);
   }
   SC_CTOR(ALU){
+    SC_METHOD(proc);
+    sensitive<<clk.pos();
   }
 };
 
@@ -492,7 +561,7 @@ SC_MODULE(DP){
   sc_out<sc_uint<16> > Instr;
   sc_out<sc_uint<4> > psr_val;
   sc_out<sc_uint<16> > Rtar_val;
-  sc_in<sc_uint<8> > pc;
+  sc_in<sc_uint<16> > pc;
   sc_in<sc_uint<8> > Imm;//signed or unsigned, 8-bit or 16-bit
   sc_in<sc_uint<6> > ctrl;
   sc_in<sc_uint<4> > Rsrc, Rdest;
@@ -500,7 +569,7 @@ SC_MODULE(DP){
   sc_uint<16> temp_instr;
   sc_uint<4> temp_psr_val;
   sc_uint<16> temp_Rtar_val;
-  sc_uint<8> temp_pc;
+  sc_uint<16> temp_pc;
   sc_uint<8> temp_Imm;
   void proc(){
 
@@ -519,8 +588,13 @@ SC_MODULE(CTRL){
     sc_in<sc_uint<16> > Rtar_val;//////////////////////// Rtar
     sc_out<sc_uint<16> > pc;
     sc_out<sc_uint<8> > Imm;//signed or unsigned, 8-bit or 16-bit
-    sc_out<sc_uint<6> > ctrl;
+    sc_out<sc_uint<10> > ctrl;//RF-2bit, DM-2bit, CTRL-6bit //RF,DM r/w enable port
+    //9-RF w; 8-RF r;
+    //7-DM w; 6-DM r;
+    //5-0 CTRL signal
     sc_out<sc_uint<4> > R_src, R_dest;
+    sc_out<sc_uint<4> > R_w;
+    ////R_Waddr
     /////////////////////////
     //PORTS
     /////////////////////////
@@ -542,6 +616,7 @@ SC_MODULE(CTRL){
     sc_uint<1> f;
     sc_uint<16> inter_pc;
     sc_uint<3> shift_op;
+    sc_uint<10> ctrl_signal;
     //local method
     void proc(){
       //Done Op: add, addi, sub, subi, and, andi, cmp, cmpi
@@ -562,6 +637,7 @@ SC_MODULE(CTRL){
         //only counting up the internal
         //program counter to retrieve
         //the next instruction
+        ctrl_signal=0b0000100111;
         ctrl.write("NOP");//NOP
         inter_pc += 1;
       }//NOP
@@ -581,131 +657,167 @@ SC_MODULE(CTRL){
         //Finished except specific CTRL signals
         if(opcode == 0){
           if(op_ext == 5){
+            ctrl_signal=0b1100000001;
             ctrl.write("ADD");//passing signals
             R_dest.write(Rdest);//Rdestination
             R_src.write(Rsrc);//Rsource
+            R_w.write(Rdest);
             inter_pc+=1;//counting up
             pc.write(inter_pc);//program counter write
           }//ADD instruction. Passing Rdest, Rsrc, PC, CTRL signal
           else if(op_ext == 9){
+            ctrl_signal=0b1100000011;
             ctrl.write("SUB");//pasing signals
             R_dest.write(Rdest);//Rdestination
             R_src.write(Rsrc);//Rsource
+            R_w.write(Rdest);
             inter_pc+=1;//counting up
             pc.write(inter_pc);//program counter write
           }//SUB instruction. Passing Rdest, Rsrc, PC, CTRL signal
           else if(op_ext == 1){
+            ctrl_signal=0b1100000111;
             ctrl.write("AND");//pasing signals
             R_dest.write(Rdest);//Rdestination
             R_src.write(Rsrc);//Rsrouce
+            R_w.write(Rdest);
             inter_pc+=1;//counting up
             pc.write(inter_pc);//program counter write
           }//AND instruction. Passing Rdest, Rsrc, PC, CTRL signal
           else if(op_ext == 11){
+            ctrl_signal=0b0100000101;
             ctrl.write("CMP");//passing signals
             R_dest.write(Rdest);//Rdestination
             R_src.write(Rsrc);//Rsource
+            R_w.write(Rdest);
             inter_pc+=1;//counting up
             pc.write(inter_pc);//program counter write
           }//CMP instruction. Passing Rdest, Rsrc, PC, CTRL signal
           else if(op_ext == 2){
+            ctrl_signal=0b1100001001;
             ctrl.write("OR");//passing signals
             R_dest.write(Rdest);//Rdestination
             R_src.write(Rsrc);//Rsource
+            R_w.write(Rdest);
             inter_pc+=1;//counting up
             pc.write(inter_pc);//program counter write
           }//OR instruction. Passing Rdest, Rsrc, PC, CTRL signal
           else if(op_ext == 3){
+            ctrl_signal=0b1100001011;
             ctrl.write("XOR");//passing signals
             R_dest.write(Rdest);//Rdestination
             R_src.write(Rsrc);//Rsource
+            R_w.write(Rdest);
             inter_pc+=1;//counting up
             pc.write(inter_pc);//program counter write
           }//XOR instruction. Passing Rdest, Rsrc, PC, CTRL signal
           else if(op_ext == 13){
-             ctrl.write("MOV");//passing signals
-             R_dest.write(Rdest);//Rdestination
-             R_src.write(Rsrc);//Rsource
-             inter_pc+=1;//counting up
-             pc.write(inter_pc);//program counter write
+            ctrl_signal=0b1100001101;
+            ctrl.write("MOV");//passing signals
+            R_dest.write(Rdest);//Rdestination
+            R_src.write(Rsrc);//Rsource
+            R_w.write(Rdest);
+            inter_pc+=1;//counting up
+            pc.write(inter_pc);//program counter write
           }//MOV instruction. Passing Rdest, Rsrc, PC, CTRL signal
         }
         //Immediate Operation or ELSE
         else{
           if(opcode == 5){
+            ctrl_signal=0b1100000010;
             ctrl.write("ADDI");//CTRL signal
             Imm.write(imm);//Immediate value write
             R_dest.write(Rdest);//Rdestination
+            R_w.write(Rdest);
             inter_pc += 1;//internal program counter counting up
             pc.write(inter_pc);//program counter write
           }//ADDI instruction. Passing Imm, Rdest, PC, CTRL signal
           else if(opcode == 9){
+            ctrl_signal=0b1100000100;
             ctrl.write("SUBI");//CTRL signal
             Imm.write(imm);//Immediate value write
             R_dest.write(Rdest);//Rdestination
+            R_w.write(Rdest);
             inter_pc += 1;//internal program counter counting up
             pc.write(inter_pc);//program counter write
           }//SUBI instruction. Passing Imm, Rdest, PC, CTRL signal
           else if(opcode == 1){
+            ctrl_signal=0b1100001000;
             ctrl.write("ANDI");//CTRL signal
             Imm.write(imm);//Immediate value write
             R_dest.write(Rdest);//Rdestination
+            R_w.write(Rdest);
             inter_pc += 1;//internal program counter counting up
             pc.write(inter_pc);//program counter write
           }//ANDI instruction. Passing Imm, Rdest, PC, CTRL signal
           else if(opcode == 11){
+            ctrl_signal=0b0100000110;
             ctrl.write("CMPI");//CTRL signal
             Imm.write(imm);//Immediate value write
             R_dest.write(Rdest);//Rdestination
+            R_w.write(Rdest);
             inter_pc += 1;//internal program counter counting up
             pc.write(inter_pc);//program counter write
           }//CMPI instruction. Passing Imm, Rdest, PC, CTRL signal
           else if(opcode == 2){
+            ctrl_signal=0b1100001010;
             ctrl.write("ORI");//CTRL signal
             Imm.write(imm);//Immediate value write
             R_dest.write(Rdest);//Rdestination
+            R_w.write(Rdest);
             inter_pc += 1;//internal program counter counting up
             pc.write(inter_pc);//program counter write
           }//ORI instruction. Passing Imm, Rdest, PC, CTRL signal
           else if(opcode == 3){
+            ctrl_signal=0b1100001100;
             ctrl.write("XORI");//CTRL signal
             Imm.write(imm);//Immediate value write
             R_dest.write(Rdest);//Rdestination
+            R_w.write(Rdest);
             inter_pc += 1;//internal program counter counting up
             pc.write(inter_pc);//program counter write
           }//XORI instruction. Passing Imm, Rdest, PC, CTRL signal
           else if(opcode == 13){
-             ctrl.write("MOVI");//CTRL signal
-             Imm.write(imm);//Immediate value write
-             R_dest.write(Rdest);//Rdestination
-             inter_pc += 1;//internal program counter counting up
-             pc.write(inter_pc);//program counter write
+            ctrl_signal=0b1100001110;
+            ctrl.write("MOVI");//CTRL signal
+            Imm.write(imm);//Immediate value write
+            R_dest.write(Rdest);//Rdestination
+            R_w.write(Rdest);
+            inter_pc += 1;//internal program counter counting up
+            pc.write(inter_pc);//program counter write
           }//MOVI instruction. Passing Imm, Rdest, PC, CTRL signal
           else if(opcode == 8){//SHIFT OPERATION
             if(shift_op == 0){//LSHI
+              ctrl_signal=0b1100010000;
               Imm.write(imm);//Immediate
               R_dest.write(Rdest);//Rdestination
+              R_w.write(Rdest);
               inter_pc += 1;//counting up for next instruction
               pc.write(inter_pc);//retrieve new instruction
               ctrl.write("LSHI");//control signal
             }
             else if(shift_op == 1){//ASHI
+              ctrl_signal=0b1100010010;
               Imm.write(imm);//Immediate
               R_dest.write(Rdest);//Rdestination
+              R_w.write(Rdest);
               inter_pc += 1;//counting up for next instruction
               pc.write(inter_pc);//retrieve new instruction
               ctrl.write("ASHI");//control signal
             }
             else if(shift_op == 2){//LSH
+              ctrl_signal=0b1100001111;
               R_dest.write(Rdest);//Rdestination
               R_src.write(Rsrc);//Ramount
+              R_w.write(Rdest);
               inter_pc += 1;//program counter counting up
               pc.write(inter_pc);//retrieve new instruction
               ctrl.write("LSH");//control signal
             }
             else if(shift_op == 3){//ASH
+              ctrl_signal=0b1100010001;
               R_dest.write(Rdest);//Rdestination
               R_src.write(Rsrc);//Ramount
+              R_w.write(Rdest);
               inter_pc += 1;//program counter counting up
               pc.write(inter_pc);//retrieve new instruction
               ctrl.write("ASH");//control signal
@@ -713,23 +825,30 @@ SC_MODULE(CTRL){
           }//SHIFT instruction...PENDING for tutorial
           else if(opcode == 4){//LOAD/STORE/JC/JAL
             if(op_ext == 0){
+              ctrl_signal=0b0001010100;
               ctrl.write("LOAD");//Load signal
               R_dest.write(Rdest);//Rdestination
               R_src.write(Rsrc);//Address from DataMemory
+              R_w.write(Rdest);
               inter_pc += 1;//program counter counting up
               pc.write(inter_pc);//write to program counter
+
             }//LOAD instruction. Passing DM address (Srouce), Rdest, PC, CTRL signal
             else if(op_ext == 4){
+              ctrl_signal=0b0010010101;
               ctrl.write("STORE");//Store signal
               R_dest.write(Rdest);//Rsource
               R_src.write(Rsrc);//Address from DataMomery
+              R_w.write(Rdest);
               inter_pc += 1;//program counter counting up
               pc.write(inter_pc);//write to program counter
             }//STOR instruction. Passing DM address (Destination), Rdest (Srouce), PC, CTRL signal
             else if(op_ext == 8){
+              ctrl_signal=0b1100100110;
               ctrl.write("JAL");// JAL signal
               R_dest.write(Rdest);//Rlink
               R_src.write(Rsrc);//Rtarget
+              R_w.write(Rdest);
               inter_pc += 1;//counting up the program counter
               pc.write(inter_pc);//write back the original counter
               //right now we need to make sure that the Rtarget need to get the value in RF[Rtar]
@@ -738,6 +857,7 @@ SC_MODULE(CTRL){
               pc.write(inter_pc);//write the new program counter
             }//JAL instruction. Passing Rlink, Rtarget, PC, CTRL signal.
             else if(op_ext == 12){//Jcond
+              //RF read required
               if(cond_bit == 0){//if condition check bit is for EQ
                 if(z==1){
                   //BEQ TRUE
@@ -749,6 +869,10 @@ SC_MODULE(CTRL){
                   inter_pc+= 1;
                   pc.write(inter_pc);
                 }
+                R_dest.write(Rdest);
+                R_src.write(Rsrc);
+                R_w.write(Rdest);
+                ctrl_signal=0b0100011110;
                 ctrl.write("EQ");
               }
               else if(cond_bit == 1){//if condition check bit is for NE
@@ -762,6 +886,10 @@ SC_MODULE(CTRL){
                   inter_pc+= 1;
                   pc.write(inter_pc);
                 }
+                R_dest.write(Rdest);
+                R_src.write(Rsrc);
+                R_w.write(Rdest);
+                ctrl_signal=0b0100011111;
                 ctrl.write("NE");
               }
               else if(cond_bit == 13){//if condition check bit is for GE
@@ -775,6 +903,10 @@ SC_MODULE(CTRL){
                   inter_pc += 1;
                   pc.write(inter_pc);
                 }
+                R_dest.write(Rdest);
+                R_src.write(Rsrc);
+                R_w.write(Rdest);
+                ctrl_signal=0b0100100000;
                 ctrl.write("GE");
               }
               else if(cond_bit == 2){//if condition check bit is for CS
@@ -788,6 +920,10 @@ SC_MODULE(CTRL){
                   pc.write(inter_pc);
                   //CS FALSE
                 }
+                R_dest.write(Rdest);
+                R_src.write(Rsrc);
+                R_w.write(Rdest);
+                ctrl_signal=0b0100100001;
                 ctrl.write("CS");
               }
               else if(cond_bit == 3){//if condition check bit is for CC
@@ -801,6 +937,10 @@ SC_MODULE(CTRL){
                   pc.write(inter_pc);
                   //CC FALSE
                 }
+                R_dest.write(Rdest);
+                R_src.write(Rsrc);
+                R_w.write(Rdest);
+                ctrl_signal=0b0100100010;
                 ctrl.write("CC");
               }
               else if(cond_bit == 6){//if condiotion check bit is for GT
@@ -814,6 +954,10 @@ SC_MODULE(CTRL){
                   pc.write(inter_pc);
                   //GT FALSE
                 }
+                R_dest.write(Rdest);
+                R_src.write(Rsrc);
+                R_w.write(Rdest);
+                ctrl_signal=0b0100100011;
                 ctrl.write("GT");
               }
               else if(cond_bit == 7){//if condition check bit is for LE
@@ -827,6 +971,10 @@ SC_MODULE(CTRL){
                   pc.write(inter_pc);
                   //LE FALSE
                 }
+                R_dest.write(Rdest);
+                R_src.write(Rsrc);
+                R_w.write(Rdest);
+                ctrl_signal=0b0100100100;
                 ctrl.write("LE");
               }
               else if(cond_bit == 12){//if condition check bit is for LT
@@ -840,6 +988,10 @@ SC_MODULE(CTRL){
                   pc.write(inter_pc);
                   //LT FALSE
                 }
+                R_dest.write(Rdest);
+                R_src.write(Rsrc);
+                R_w.write(Rdest);
+                ctrl_signal=0b0100100101;
                 ctrl.write("LT");
               }
               //ctrl.write("Jcond");
@@ -859,6 +1011,10 @@ SC_MODULE(CTRL){
               //BEQ FALSE
               //PC = PC + 2
               }
+              R_dest.write(Rdest);
+              R_src.write(Rsrc);
+              R_w.write(Rdest);
+              ctrl_signal=0b0000010110;
               ctrl.write("EQ");
             }
             else if(cond_bit == 1){
@@ -874,6 +1030,10 @@ SC_MODULE(CTRL){
                 //BNE FALSE
                 //PC = PC + 2
               }
+              R_dest.write(Rdest);
+              R_src.write(Rsrc);
+              R_w.write(Rdest);
+              ctrl_signal=0b0000010111;
               ctrl.write("NE");
             }
             else if(cond_bit == 13){
@@ -887,6 +1047,10 @@ SC_MODULE(CTRL){
                 pc.write(inter_pc);
                 //GE FALSE
               }
+              R_dest.write(Rdest);
+              R_src.write(Rsrc);
+              R_w.write(Rdest);
+              ctrl_signal=0b0000011000;
               ctrl.write("GE");
             }
             else if(cond_bit == 2){
@@ -900,6 +1064,10 @@ SC_MODULE(CTRL){
                 pc.write(inter_pc);
                 //CS FALSE
               }
+              R_dest.write(Rdest);
+              R_src.write(Rsrc);
+              R_w.write(Rdest);
+              ctrl_signal=0b0000011001;
               ctrl.write("CS");
             }
             else if(cond_bit == 3){
@@ -913,6 +1081,10 @@ SC_MODULE(CTRL){
                 pc.write(inter_pc);
                 //CC FALSE
               }
+              R_dest.write(Rdest);
+              R_src.write(Rsrc);
+              R_w.write(Rdest);
+              ctrl_signal=0b0000011010;
               ctrl.write("CC");
             }
             else if(cond_bit == 6){
@@ -926,6 +1098,10 @@ SC_MODULE(CTRL){
                 pc.write(inter_pc);
                 //GT FALSE
               }
+              R_dest.write(Rdest);
+              R_src.write(Rsrc);
+              R_w.write(Rdest);
+              ctrl_signal=0b0000011011;
               ctrl.write("GT");
             }
             else if(cond_bit == 7){
@@ -939,6 +1115,10 @@ SC_MODULE(CTRL){
                 pc.write(inter_pc);
                 //LE FALSE
               }
+              R_dest.write(Rdest);
+              R_src.write(Rsrc);
+              R_w.write(Rdest);
+              ctrl_signal=0b0000011100;
               ctrl.write("LE");
             }
             else if(cond_bit == 12){
@@ -952,13 +1132,20 @@ SC_MODULE(CTRL){
                 pc.write(inter_pc);
                 //LT FALSE
               }
+              R_dest.write(Rdest);
+              R_src.write(Rsrc);
+              R_w.write(Rdest);
+              ctrl_signal=0b0000011101;
               ctrl.write("LT");
             }
             ctrl.write("Bcond");
           }
           else if(opcode == 15){
+            ctrl_signal=0b1000010011;
             Imm.write(imm);//Immediate
             R_dest.write(Rdest);//Rdestination
+            R_src.write(Rsrc);
+            R_w.write(Rdest);
             inter_pc += 1;//program counter counting up
             pc.write(inter_pc);//retrieve new instructions
             ctrl.write("LUI");//control signal
