@@ -1,0 +1,78 @@
+$date
+     Feb 25, 2020       14:02:29
+$end
+
+$version
+ SystemC 2.3.2-Accellera --- Feb  5 2018 16:33:57
+$end
+
+$timescale
+     1 ps
+$end
+
+$scope module SystemC $end
+$scope module rf $end
+$var wire   16  aaaaa  data2 [15:0]  $end
+$var wire   16  aaaab  data1 [15:0]  $end
+$var wire   16  aaaac  Wdata [15:0]  $end
+$var wire    4  aaaad  Waddr [3:0]  $end
+$var wire    4  aaaae  Raddr1 [3:0]  $end
+$var wire    1  aaaaf  rd_en       $end
+$var wire    1  aaaag  wr_en       $end
+$upscope $end
+$upscope $end
+$enddefinitions  $end
+
+$comment
+All initial values are dumped below at time 0 sec = 0 timescale units.
+$end
+
+$dumpvars
+b0 aaaaa
+b0 aaaab
+b0 aaaac
+b0 aaaad
+b0 aaaae
+0aaaaf
+1aaaag
+$end
+
+#6000
+b1 aaaac
+b1 aaaad
+
+#9000
+b10 aaaac
+b10 aaaad
+
+#12000
+b11 aaaac
+b11 aaaad
+
+#15000
+b100 aaaac
+b100 aaaad
+
+#21000
+0aaaag
+
+#24000
+1aaaaf
+
+#27000
+b1 aaaab
+b1 aaaae
+
+#30000
+b10 aaaab
+b10 aaaae
+
+#33000
+b11 aaaab
+b11 aaaae
+
+#36000
+b100 aaaab
+b100 aaaae
+
+#100000
