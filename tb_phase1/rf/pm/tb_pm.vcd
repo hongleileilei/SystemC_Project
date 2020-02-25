@@ -1,0 +1,40 @@
+$date
+     Feb 25, 2020       15:01:21
+$end
+
+$version
+ SystemC 2.3.2-Accellera --- Feb  5 2018 16:33:57
+$end
+
+$timescale
+     1 ps
+$end
+
+$scope module SystemC $end
+$var wire   16  aaaaa  pm_data [15:0]  $end
+$var wire   16  aaaab  pm_addr [15:0]  $end
+$upscope $end
+$enddefinitions  $end
+
+$comment
+All initial values are dumped below at time 0 sec = 0 timescale units.
+$end
+
+$dumpvars
+b11101010 aaaaa
+b0 aaaab
+$end
+
+#12000
+b1110000 aaaaa
+b1 aaaab
+
+#21000
+b111001000 aaaaa
+b10 aaaab
+
+#30000
+b1 aaaaa
+b11 aaaab
+
+#100000
