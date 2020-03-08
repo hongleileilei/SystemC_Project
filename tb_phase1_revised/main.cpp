@@ -4,7 +4,6 @@
 #include "ctrl.h"
 #include "dp.h"
 
-
 int sc_main(int argc, char* argv[]){
 
 	sc_clock clk("clk", 10, SC_NS);
@@ -15,7 +14,7 @@ int sc_main(int argc, char* argv[]){
 	sc_signal<sc_uint<8> > Imm;//signed or unsigned, 8-bit or 16-bit
 	/////////////////////////////
 	sc_signal<sc_uint<6> > alu_ctrl;
-	sc_signal<sc_uint<1> >m4;
+	sc_signal<sc_uint<1> > m4;
 	sc_signal<sc_uint<1> > m3;
 	sc_signal<sc_uint<1> > m2;
 	sc_signal<sc_uint<1> > m1;
@@ -26,15 +25,15 @@ int sc_main(int argc, char* argv[]){
 	sc_signal<sc_uint<4> > R_src, R_dest;
 	sc_signal<sc_uint<4> > R_w;
 
-	
 
-	CTRL ctrl("ctrl");
-	ctrl << Instr << psr << Rtar_val << pc << Imm << alu_ctrl << m4 << m3 << m2 << m1 << rf_wr << rf_rd << dm_wr << dm_rd << R_src << R_dest << R_w;
-	
-	DP dp("dp");	
-	dp << clk <<Instr << psr << Rtar_val << pc << Imm << alu_ctrl << R_src << R_dest << R_w << m1 << m2 << m3 << m4 << dm_rd << dm_wr << rf_rd << rf_wr; 
-	
+
+	//CTRL ctrl("ctrl");
+	//ctrl << Instr << psr << Rtar_val << pc << Imm << alu_ctrl << m4 << m3 << m2 << m1 << rf_wr << rf_rd << dm_wr << dm_rd << R_src << R_dest << R_w;
+
+	//DP dp("dp");
+	//dp << clk <<Instr << psr << Rtar_val << pc << Imm << alu_ctrl << R_src << R_dest << R_w << m1 << m2 << m3 << m4 << dm_rd << dm_wr << rf_rd << rf_wr;
+
 	sc_start(100, SC_NS);
-	
+
 	return 0;
 }

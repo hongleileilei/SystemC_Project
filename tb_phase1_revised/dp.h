@@ -3,6 +3,7 @@
 #define _DP_H
 #include "systemc.h"
 #include "alu.h"
+
 #include "rf.h"
 #include "dm.h"
 #include "pm.h"
@@ -32,7 +33,7 @@ SC_MODULE(DP){
 
   sc_signal<sc_uint<16> > dm_addr, dm_datain, dm_dataout, rf_Wdata;
   sc_signal<sc_uint<16> > alu_data1, alu_data2;
-  sc_signal<sc_uint<16> > MAR, MDR, RF;
+  sc_signal<sc_uint<16> > MAR, MDR;
 
   DM *dm;
   PM *pm;
@@ -41,10 +42,10 @@ SC_MODULE(DP){
 
 
   SC_CTOR(DP){
-    dm = new DM("dm");
-    pm = new PM("pm");
-    rf = new RF("rf");
-    alu = new ALU("alu");
+    dm = new DM("DM_dm");
+    pm = new PM("PM_pm");
+    rf = new RF("RF_rf");
+    alu = new ALU("ALU_alu");
 
     dm->wr_en(DM_W);
     dm->rd_en(DM_R);
@@ -60,9 +61,10 @@ SC_MODULE(DP){
     rf->rd_en(RF_R);//
     rf->Raddr1(RDEST);//Rdestination//
     rf->Raddr2(RSRC);//Rsource//
-    rf->Raddr2(RTAR);/////////////////////////////////////////////////////  BE CAREFULL //////////////////////////////////////////////
+    //rf->Raddr2(RTAR);/////////////////////////////////////////////////////  BE CAREFULL //////////////////////////////////////////////
     rf->Waddr(RDEST);//  //////////////////  YOU WEN TI  //////////////////////////////////////
     rf->Wdata(rf_Wdata);//
+    rf->data2(RTAR);
     rf->data1(alu_data1);//Destination
     rf->data2(alu_data2);//Source
 
@@ -79,6 +81,7 @@ SC_MODULE(DP){
     alu->MAR(dm_addr);//
     alu->MDR(dm_datain);
     alu->RF(rf_Wdata);
+  }
 };
 
 #endif

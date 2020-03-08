@@ -22,7 +22,7 @@ SC_MODULE(ALU){
   sc_out<sc_uint<4> > PSR;//PORTS SEQUENCE: cnfz
   sc_out<sc_uint<16> > MAR, MDR, RF;//computation result
   //data1:Rdest data2:Rsrc,Ramt,Raddr
-  
+
   sc_uint<16> data1;
   sc_uint<16> data2;
   sc_uint<16> result;
