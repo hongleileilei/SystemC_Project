@@ -1,0 +1,183 @@
+$date
+     Mar 13, 2020       15:48:58
+$end
+
+$version
+ SystemC 2.3.2-Accellera --- Feb  5 2018 16:33:57
+$end
+
+$timescale
+     1 ps
+$end
+
+$scope module SystemC $end
+$var wire    1  aaaaa  clk       $end
+$scope module ctrl $end
+$var wire   16  aaaab  tem_instr [15:0]  $end
+$var wire   16  aaaac  counter_instr [15:0]  $end
+$var wire   16  aaaad  Instr [15:0]  $end
+$upscope $end
+$upscope $end
+$enddefinitions  $end
+
+$comment
+All initial values are dumped below at time 0 sec = 0 timescale units.
+$end
+
+$dumpvars
+0aaaaa
+b0 aaaab
+b0 aaaac
+b100001000000011 aaaad
+$end
+
+#10000
+1aaaaa
+b100001000000011 aaaab
+b100010000000101 aaaad
+
+#15000
+0aaaaa
+
+#20000
+1aaaaa
+b100010000000101 aaaab
+b100001000000011 aaaac
+b101100000010001 aaaad
+
+#25000
+0aaaaa
+
+#30000
+1aaaaa
+b101100000010001 aaaab
+b100010000000101 aaaac
+b0 aaaad
+
+#35000
+0aaaaa
+
+#40000
+1aaaaa
+b0 aaaab
+b101100000010001 aaaac
+
+#45000
+0aaaaa
+
+#50000
+1aaaaa
+b0 aaaac
+
+#55000
+0aaaaa
+
+#60000
+1aaaaa
+b100001010010 aaaad
+
+#65000
+0aaaaa
+
+#70000
+1aaaaa
+b100001010010 aaaab
+b100011000000111 aaaad
+
+#75000
+0aaaaa
+
+#80000
+1aaaaa
+b100011000000111 aaaab
+b100001010010 aaaac
+b1001100000001111 aaaad
+
+#85000
+0aaaaa
+
+#90000
+1aaaaa
+b1001100000001111 aaaab
+b100011000000111 aaaac
+b100001000000101 aaaad
+
+#95000
+0aaaaa
+
+#100000
+1aaaaa
+b100001000000101 aaaab
+b1001100000001111 aaaac
+b1001011000 aaaad
+
+#105000
+0aaaaa
+
+#110000
+1aaaaa
+b1001011000 aaaab
+b100001000000101 aaaac
+b100100001000010 aaaad
+
+#115000
+0aaaaa
+
+#120000
+1aaaaa
+b100100001000010 aaaab
+b1001011000 aaaac
+b100010001000101 aaaad
+
+#125000
+0aaaaa
+
+#130000
+1aaaaa
+b100010001000101 aaaab
+b100100001000010 aaaac
+b0 aaaad
+
+#135000
+0aaaaa
+
+#140000
+1aaaaa
+b0 aaaab
+b100010001000101 aaaac
+
+#145000
+0aaaaa
+
+#150000
+1aaaaa
+b0 aaaac
+
+#155000
+0aaaaa
+
+#160000
+1aaaaa
+
+#165000
+0aaaaa
+
+#170000
+1aaaaa
+
+#175000
+0aaaaa
+
+#180000
+1aaaaa
+
+#185000
+0aaaaa
+
+#190000
+1aaaaa
+
+#195000
+0aaaaa
+
+#200000
