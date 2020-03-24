@@ -1,24 +1,29 @@
 
 
-#ifndef _ROBOT_H_
-#define _ROBOT_H_
+#ifndef _PROCESS_H_
+#define _PROCESS_H_
 #include "systemc.h"
+#include "vector"
+using namespace std;
 
 
 // statuc:0--crossing, 1--stop, 2--move
 SC_MODULE(PROCESS) {
+private:
+    int map[8][8];  // 地图是一个8行8列的数据结构, 0代表没有， grid编号从1开始
+    int (*pt)[8] = NULL; // 用于初始化map, 注意二维数组的传递
+    vector<int> vec_1, vec_2; //path, path从起始位置（0， 0）开始
 public:
     sc_in<bool> clk;    
-    sc_in<int> Trigger;  // receiver对trigger敏感
-    sc_in<int> Next_grid_1, Next_grid_2;
+    sc_in<int> Receive_trigger_1, Receive_trigger_2;  // receiver对trigger敏感
     sc_in<int> If_ok_to_cross_1, If_ok_to_cross_2;
 
     sc_out<int> R1_trigger, R2_trigger;  //  receiver对于trigger上升延敏感
     sc_out<int> R1_status, R2_status;
+    sc_out<int> Now_grid_1, Now_grid_2;
+    sc_out<int> Next_grid_1, Next_grid_2;
 
     sc_signal<int> Flag; // tansmit对Flag敏感
-
-    bool flag;
 
     int r1_trigger, r2_trigger;
     int r1_status, r2_status;
@@ -30,47 +35,54 @@ public:
     int next_grid_1, next_grid_2;
     int now_grid_1, now_grid_2;
 
-    int map[8][8];  // 地图是一个8行8列的数据结构, 0代表没有， grid编号从1开始
-    int* pt = NULL; // 用于初始化map
-
     int obstacle_x_1, obstacle_x_2;
     int obstacle_y_1, obstacle_y_2;
 
     int robot_x_1, robot_x_2;
-    int robot_y_1, robot_x_2;
+    int robot_y_1, robot_y_2;
 
     int robot_1_before_boundary_0_5;  //表示位， 用在robot位置更新中：若为1， 则说明 可能 需要停在boundary上
     int robot_2_before_boundary_0_5;
 
     int direction_1, direction_2; // 表示robot_1， robot_2 的运动方向
 
+    int lock; // 用于去除 vector 中第一个元素
+    int arrive_at_destination_1, arrive_at_destination_2; //用来判断是否到达终点
+
 
 
     void proc_robot_position(int &x, int &y, int &direction);
     void proc_obstacle_position(int &x);
-    int if_reach_boundary(int &x, int &y, int &robot_before_boundary_0_5, int &direction, int &now_grid, int &next_grid)
-    void updata_helper(int &robot_x, int &robot_y, int &direction, int &robot_before_boundary_0_5, int &now_grid, int &next_grid, int &if_ok_to_cross, int &status);
+    int if_reach_boundary(int &x, int &y, int &robot_before_boundary_0_5, int &direction, int &now_grid, int &next_grid);
+    void updata_helper(int &robot_x, int &robot_y, int &direction, int &robot_before_boundary_0_5, int &now_grid, int &next_grid, int &if_ok_to_cross, int &status, vector<int> &vec, int &arrive_at_destination);
     void updata();
-    void transmite();
+    void transmit();
     void receive();
+
     SC_HAS_PROCESS(PROCESS);
-    ROBOT(sc_module_name process, const int* coeffs, int obstacle_y_1, int obstacle_y_2) : sc_module(process), pt(coeffs), obstacle_y_1(obstacle_y_1, obstacle_y_2(obstacle_y_2)) {
+    PROCESS(sc_module_name process, int (*coeffs)[8], int obstacle_y_1, int obstacle_y_2, vector<int> path1, vector<int> path2) : sc_module(process), pt(coeffs), obstacle_y_1(obstacle_y_1), obstacle_y_2(obstacle_y_2), vec_1(path1), vec_2(path2) {
         obstacle_x_1 = 0; // 两个obstacle都在x方向移动
         obstacle_x_2 = 0;
-        robot_x = 0;
-        robot_y = 0;
-        rotot_1_before_boundary_0_5 = 0;
-        rotot_2_before_boundary_0_5 = 0;
-        flag = 0;
+        robot_x_1 = 0;
+        robot_x_2 = 0;
+        robot_y_1 = 0;
+        robot_y_2 = 0;
+        robot_1_before_boundary_0_5 = 0;
+        robot_2_before_boundary_0_5 = 0;
+        Flag = 0;
         r1_trigger = 0;
         r2_trigger = 0;
+        lock = 0;
+        arrive_at_destination_1 = 0;
+        arrive_at_destination_2 = 0;
+
 
         SC_METHOD(updata);
         sensitive << clk.pos();
         SC_METHOD(transmit);
         sensitive << Flag;
         SC_METHOD(receive);
-        sensitive << Trigger.pos();
+        sensitive << Receive_trigger_1 << Receive_trigger_2;
 
         for (int i = 0; i < 8; i++) {
             for (int j = 0; j < 8; j++) {
